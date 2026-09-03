@@ -1,0 +1,1734 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Egypt real estate platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: profile
+    description: Current user profile
+  - name: listings
+    description: Property listings
+  - name: offices
+    description: Real-estate offices
+  - name: requests
+    description: Property requests from buyers/renters
+  - name: savedSearches
+    description: Saved searches with alerts
+  - name: favorites
+    description: Favorited listings
+  - name: compare
+    description: Saved property comparisons
+  - name: notifications
+    description: User notifications
+  - name: reports
+    description: Listing/office reports
+  - name: meta
+    description: Static reference data
+  - name: dashboard
+    description: Dashboard aggregates
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ---------- Auth ----------
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+        - $ref: "#/components/parameters/SessionCookie"
+      responses:
+        "200":
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserEnvelope"
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          description: Relative path to redirect to after login (must start with `/`). Defaults to `/`.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the OIDC authorization endpoint.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        "302":
+          description: Redirect to the `returnTo` path on success (defaults to `/`) or `/api/login` on failure.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+        - $ref: "#/components/parameters/SessionCookie"
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+            default: /
+      responses:
+        "302":
+          description: Redirect to the OIDC provider logout URL with a post-logout redirect back to the validated `returnTo` path.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileTokenExchangeRequest"
+      responses:
+        "200":
+          description: Session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileTokenExchangeSuccess"
+        "400":
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Token did not contain usable claims.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Token exchange failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+      responses:
+        "200":
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutSuccess"
+
+  # ---------- Profile ----------
+  /profile:
+    get:
+      tags: [profile]
+      operationId: getProfile
+      summary: Get the current user's full platform profile
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      tags: [profile]
+      operationId: updateProfile
+      summary: Update the current user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Listings ----------
+  /listings:
+    get:
+      tags: [listings]
+      operationId: listListings
+      summary: List/search listings with filters, sorting and pagination
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: governorate, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: area, in: query, schema: { type: string } }
+        - { name: propertyType, in: query, schema: { $ref: "#/components/schemas/PropertyType" } }
+        - { name: listingType, in: query, schema: { $ref: "#/components/schemas/ListingType" } }
+        - { name: priceMin, in: query, schema: { type: number } }
+        - { name: priceMax, in: query, schema: { type: number } }
+        - { name: roomsMin, in: query, schema: { type: integer } }
+        - { name: bathroomsMin, in: query, schema: { type: integer } }
+        - { name: sizeMin, in: query, schema: { type: number } }
+        - { name: furnished, in: query, schema: { type: boolean } }
+        - { name: installmentAvailable, in: query, schema: { type: boolean } }
+        - { name: immediateDelivery, in: query, schema: { type: boolean } }
+        - { name: verifiedOnly, in: query, schema: { type: boolean } }
+        - { name: officeId, in: query, schema: { type: string } }
+        - { name: ownerId, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { $ref: "#/components/schemas/ListingSort" } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 60, default: 20 } }
+      responses:
+        "200":
+          description: Paginated listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingsPage"
+    post:
+      tags: [listings]
+      operationId: createListing
+      summary: Create a listing (office admins only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listing"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: A very similar listing already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /listings/featured:
+    get:
+      tags: [listings]
+      operationId: listFeaturedListings
+      summary: Featured/verified listings for the home page
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 24, default: 8 } }
+      responses:
+        "200":
+          description: Featured listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Listing" }
+  /listings/daily-feed:
+    get:
+      tags: [listings]
+      operationId: listDailyFeedListings
+      summary: Freshest listings published today, for the home page daily feed
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 24, default: 10 } }
+      responses:
+        "200":
+          description: Daily feed listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Listing" }
+  /listings/{id}:
+    get:
+      tags: [listings]
+      operationId: getListing
+      summary: Get full listing details
+      parameters:
+        - { $ref: "#/components/parameters/ListingIdParam" }
+      responses:
+        "200":
+          description: Listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listing"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      tags: [listings]
+      operationId: updateListing
+      summary: Update a listing (owner/office admin only)
+      parameters:
+        - { $ref: "#/components/parameters/ListingIdParam" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingUpdate"
+      responses:
+        "200":
+          description: Updated listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listing"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    delete:
+      tags: [listings]
+      operationId: deleteListing
+      summary: Remove a listing (owner/office admin only)
+      parameters:
+        - { $ref: "#/components/parameters/ListingIdParam" }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /listings/{id}/similar:
+    get:
+      tags: [listings]
+      operationId: listSimilarListings
+      summary: Similar listings (same area/type, close price range). Returns up to 6 results.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Similar listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Listing" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Areas ----------
+  /areas/trending:
+    get:
+      tags: [meta]
+      operationId: listTrendingAreas
+      summary: Trending areas ranked by recent listing activity
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 8 } }
+      responses:
+        "200":
+          description: Trending areas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TrendingArea" }
+
+  /governorates:
+    get:
+      tags: [meta]
+      operationId: listGovernorates
+      summary: Static list of governorates and their cities
+      responses:
+        "200":
+          description: Governorates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Governorate" }
+
+  # ---------- Offices ----------
+  /offices:
+    get:
+      tags: [offices]
+      operationId: listOffices
+      summary: List offices
+      parameters:
+        - { name: verifiedOnly, in: query, schema: { type: boolean } }
+        - { name: governorate, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 60, default: 20 } }
+      responses:
+        "200":
+          description: Offices
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Office" }
+    post:
+      tags: [offices]
+      operationId: createOffice
+      summary: Create an office profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfficeInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Office"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /offices/{id}:
+    get:
+      tags: [offices]
+      operationId: getOffice
+      summary: Get office profile with stats
+      parameters:
+        - { $ref: "#/components/parameters/OfficeIdParam" }
+      responses:
+        "200":
+          description: Office
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Office"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      tags: [offices]
+      operationId: updateOffice
+      summary: Update an office profile (office admin only)
+      parameters:
+        - { $ref: "#/components/parameters/OfficeIdParam" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfficeUpdate"
+      responses:
+        "200":
+          description: Updated office
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Office"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Requests ----------
+  /requests:
+    get:
+      tags: [requests]
+      operationId: listRequests
+      summary: List the current user's property requests
+      responses:
+        "200":
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PropertyRequest" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      tags: [requests]
+      operationId: createRequest
+      summary: Create a property request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PropertyRequest"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /requests/{id}:
+    patch:
+      tags: [requests]
+      operationId: updateRequest
+      summary: Update a property request
+      parameters:
+        - { $ref: "#/components/parameters/RequestIdParam" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestUpdate"
+      responses:
+        "200":
+          description: Updated request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PropertyRequest"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /requests/{id}/matches:
+    get:
+      tags: [requests]
+      operationId: listRequestMatches
+      summary: Listings matching a property request's criteria
+      parameters:
+        - { $ref: "#/components/parameters/RequestIdParam" }
+      responses:
+        "200":
+          description: Matched listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Listing" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Saved searches ----------
+  /saved-searches:
+    get:
+      tags: [savedSearches]
+      operationId: listSavedSearches
+      summary: List the current user's saved searches
+      responses:
+        "200":
+          description: Saved searches
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SavedSearch" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      tags: [savedSearches]
+      operationId: createSavedSearch
+      summary: Save a search with optional alerts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedSearchInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedSearch"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /saved-searches/{id}:
+    patch:
+      tags: [savedSearches]
+      operationId: updateSavedSearch
+      summary: Update a saved search's name/filters/alerts
+      parameters:
+        - { $ref: "#/components/parameters/SavedSearchIdParam" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedSearchUpdate"
+      responses:
+        "200":
+          description: Updated saved search
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedSearch"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    delete:
+      tags: [savedSearches]
+      operationId: deleteSavedSearch
+      summary: Delete a saved search
+      parameters:
+        - { $ref: "#/components/parameters/SavedSearchIdParam" }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Favorites ----------
+  /favorites:
+    get:
+      tags: [favorites]
+      operationId: listFavorites
+      summary: List the current user's favorited listings
+      responses:
+        "200":
+          description: Favorites
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Favorite" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      tags: [favorites]
+      operationId: createFavorite
+      summary: Favorite a listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Favorite"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Listing not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /favorites/{id}:
+    delete:
+      tags: [favorites]
+      operationId: deleteFavorite
+      summary: Remove a favorite
+      parameters:
+        - { $ref: "#/components/parameters/FavoriteIdParam" }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Compare ----------
+  /compare:
+    get:
+      tags: [compare]
+      operationId: listComparisons
+      summary: List the current user's saved comparisons
+      responses:
+        "200":
+          description: Comparisons
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Comparison" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      tags: [compare]
+      operationId: createComparison
+      summary: Save a comparison of up to 3 listings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComparisonInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comparison"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /compare/{id}:
+    delete:
+      tags: [compare]
+      operationId: deleteComparison
+      summary: Delete a saved comparison
+      parameters:
+        - { $ref: "#/components/parameters/ComparisonIdParam" }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Notifications ----------
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: List the current user's notifications
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Notification" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /notifications/read-all:
+    patch:
+      tags: [notifications]
+      operationId: markAllNotificationsRead
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: Updated notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Notification" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /notifications/{id}/read:
+    patch:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark a single notification as read
+      parameters:
+        - { $ref: "#/components/parameters/NotificationIdParam" }
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Reports ----------
+  /reports:
+    get:
+      tags: [reports]
+      operationId: listReports
+      summary: List all reports (platform admin only)
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ReportStatus" } }
+      responses:
+        "200":
+          description: Reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Report" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Not a platform admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      tags: [reports]
+      operationId: createReport
+      summary: Submit a report on a listing or office
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /reports/{id}:
+    patch:
+      tags: [reports]
+      operationId: updateReport
+      summary: Update a report's status (platform admin only)
+      parameters:
+        - { $ref: "#/components/parameters/ReportIdParam" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportUpdate"
+      responses:
+        "200":
+          description: Updated report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Not a platform admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # ---------- Dashboard ----------
+  /dashboard/summary:
+    get:
+      tags: [dashboard]
+      operationId: getDashboardSummary
+      summary: Aggregate counts for the dashboard home page
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — `Bearer <sid>`.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
+    ListingIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    OfficeIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    RequestIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    SavedSearchIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    FavoriteIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ComparisonIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    NotificationIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ReportIdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    # ----- Auth -----
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id: { type: string }
+        email: { type: [string, "null"], format: email }
+        firstName: { type: [string, "null"] }
+        lastName: { type: [string, "null"] }
+        profileImageUrl: { type: [string, "null"] }
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code: { type: string, minLength: 1 }
+        code_verifier: { type: string, minLength: 1 }
+        redirect_uri: { type: string, minLength: 1, format: uri }
+        state: { type: string, minLength: 1 }
+        nonce: { type: string, minLength: 1 }
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: true }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    # ----- Enums -----
+    Role:
+      type: string
+      enum: [USER, OFFICE_ADMIN, PLATFORM_ADMIN]
+    VerifiedStatus:
+      type: string
+      enum: [VERIFIED, PENDING, UNVERIFIED]
+    ListingType:
+      type: string
+      enum: [SALE, RENT]
+    PropertyType:
+      type: string
+      enum: [APARTMENT, VILLA, DUPLEX, PENTHOUSE, STUDIO, TOWNHOUSE, CHALET, LAND, OFFICE, SHOP, WAREHOUSE]
+    Finishing:
+      type: string
+      enum: [SUPER_LUX, LUX, SEMI_FINISHED, CORE_AND_SHELL, UNFINISHED]
+    PriceStatus:
+      type: string
+      enum: [FIXED, NEGOTIABLE, REDUCED]
+    ListingStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, UNPUBLISHED, SOLD, RENTED]
+    ListingSort:
+      type: string
+      enum: [newest, price_asc, price_desc, size_desc]
+    RequestStatus:
+      type: string
+      enum: [OPEN, MATCHED, CLOSED]
+    ReportStatus:
+      type: string
+      enum: [PENDING, REVIEWED, RESOLVED, DISMISSED]
+    NotificationType:
+      type: string
+      enum: [NEW_MATCH, PRICE_DROP, SAVED_SEARCH_ALERT, SYSTEM, REPORT_UPDATE]
+
+    # ----- Profile -----
+    Profile:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl, phone, role, officeId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        email: { type: [string, "null"] }
+        firstName: { type: [string, "null"] }
+        lastName: { type: [string, "null"] }
+        profileImageUrl: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        role: { $ref: "#/components/schemas/Role" }
+        officeId: { type: [string, "null"] }
+        office:
+          oneOf:
+            - $ref: "#/components/schemas/OfficeSummary"
+            - type: "null"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProfileUpdate:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string }
+
+    # ----- Office -----
+    OfficeSummary:
+      type: object
+      required: [id, name, slug, logoUrl, verifiedStatus, ratingAvg, responseSpeed, phone, whatsapp]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        logoUrl: { type: [string, "null"] }
+        verifiedStatus: { $ref: "#/components/schemas/VerifiedStatus" }
+        ratingAvg: { type: [number, "null"] }
+        responseSpeed: { type: [string, "null"] }
+        phone: { type: string }
+        whatsapp: { type: [string, "null"] }
+    Office:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - logoUrl
+        - phone
+        - whatsapp
+        - email
+        - website
+        - address
+        - governorate
+        - city
+        - yearsOfExperience
+        - responseSpeed
+        - ratingAvg
+        - verifiedStatus
+        - dealsCount
+        - activeListingsCount
+        - bio
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        logoUrl: { type: [string, "null"] }
+        phone: { type: string }
+        whatsapp: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        website: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        governorate: { type: string }
+        city: { type: string }
+        yearsOfExperience: { type: [integer, "null"] }
+        responseSpeed: { type: [string, "null"] }
+        ratingAvg: { type: [number, "null"] }
+        verifiedStatus: { $ref: "#/components/schemas/VerifiedStatus" }
+        dealsCount: { type: integer }
+        activeListingsCount: { type: integer }
+        bio: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OfficeInput:
+      type: object
+      required: [name, phone, governorate, city]
+      properties:
+        name: { type: string, minLength: 1 }
+        logoUrl: { type: string }
+        phone: { type: string, minLength: 1 }
+        whatsapp: { type: string }
+        email: { type: string, format: email }
+        website: { type: string }
+        address: { type: string }
+        governorate: { type: string, minLength: 1 }
+        city: { type: string, minLength: 1 }
+        yearsOfExperience: { type: integer }
+        bio: { type: string }
+    OfficeUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        logoUrl: { type: string }
+        phone: { type: string, minLength: 1 }
+        whatsapp: { type: string }
+        email: { type: string, format: email }
+        website: { type: string }
+        address: { type: string }
+        governorate: { type: string }
+        city: { type: string }
+        yearsOfExperience: { type: integer }
+        responseSpeed: { type: string }
+        bio: { type: string }
+        verifiedStatus: { $ref: "#/components/schemas/VerifiedStatus" }
+
+    # ----- Listing -----
+    Listing:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - description
+        - price
+        - currency
+        - propertyType
+        - listingType
+        - governorate
+        - city
+        - area
+        - neighborhood
+        - street
+        - size
+        - rooms
+        - bathrooms
+        - finishing
+        - floor
+        - hasElevator
+        - hasGarage
+        - hasGarden
+        - hasPool
+        - furnished
+        - installmentAvailable
+        - immediateDelivery
+        - kitchen
+        - orientation
+        - constructionYear
+        - images
+        - videoUrl
+        - mapLat
+        - mapLng
+        - officeId
+        - ownerId
+        - office
+        - verifiedStatus
+        - priceStatus
+        - status
+        - viewsCount
+        - favoritesCount
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        title: { type: string }
+        slug: { type: string }
+        description: { type: [string, "null"] }
+        price: { type: number }
+        currency: { type: string }
+        propertyType: { $ref: "#/components/schemas/PropertyType" }
+        listingType: { $ref: "#/components/schemas/ListingType" }
+        governorate: { type: string }
+        city: { type: string }
+        area: { type: [string, "null"] }
+        neighborhood: { type: [string, "null"] }
+        street: { type: [string, "null"] }
+        size: { type: [number, "null"] }
+        rooms: { type: [integer, "null"] }
+        bathrooms: { type: [integer, "null"] }
+        finishing:
+          oneOf:
+            - $ref: "#/components/schemas/Finishing"
+            - type: "null"
+        floor: { type: [string, "null"] }
+        hasElevator: { type: boolean }
+        hasGarage: { type: boolean }
+        hasGarden: { type: boolean }
+        hasPool: { type: boolean }
+        furnished: { type: boolean }
+        installmentAvailable: { type: boolean }
+        immediateDelivery: { type: boolean }
+        kitchen: { type: [string, "null"] }
+        orientation: { type: [string, "null"] }
+        constructionYear: { type: [integer, "null"] }
+        images:
+          type: array
+          items: { type: string }
+        videoUrl: { type: [string, "null"] }
+        mapLat: { type: [number, "null"] }
+        mapLng: { type: [number, "null"] }
+        officeId: { type: [string, "null"] }
+        ownerId: { type: [string, "null"] }
+        office:
+          oneOf:
+            - $ref: "#/components/schemas/OfficeSummary"
+            - type: "null"
+        verifiedStatus: { $ref: "#/components/schemas/VerifiedStatus" }
+        priceStatus: { $ref: "#/components/schemas/PriceStatus" }
+        status: { $ref: "#/components/schemas/ListingStatus" }
+        viewsCount: { type: integer }
+        favoritesCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ListingsPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Listing" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    ListingInput:
+      type: object
+      required: [title, price, currency, propertyType, listingType, governorate, city]
+      properties:
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        currency: { type: string, minLength: 1 }
+        propertyType: { $ref: "#/components/schemas/PropertyType" }
+        listingType: { $ref: "#/components/schemas/ListingType" }
+        governorate: { type: string, minLength: 1 }
+        city: { type: string, minLength: 1 }
+        area: { type: string }
+        neighborhood: { type: string }
+        street: { type: string }
+        size: { type: number }
+        rooms: { type: integer }
+        bathrooms: { type: integer }
+        finishing: { $ref: "#/components/schemas/Finishing" }
+        floor: { type: string }
+        hasElevator: { type: boolean, default: false }
+        hasGarage: { type: boolean, default: false }
+        hasGarden: { type: boolean, default: false }
+        hasPool: { type: boolean, default: false }
+        furnished: { type: boolean, default: false }
+        installmentAvailable: { type: boolean, default: false }
+        immediateDelivery: { type: boolean, default: false }
+        kitchen: { type: string }
+        orientation: { type: string }
+        constructionYear: { type: integer }
+        images:
+          type: array
+          items: { type: string }
+        videoUrl: { type: string }
+        mapLat: { type: number }
+        mapLng: { type: number }
+        priceStatus: { $ref: "#/components/schemas/PriceStatus" }
+        status: { $ref: "#/components/schemas/ListingStatus" }
+    ListingUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        currency: { type: string }
+        propertyType: { $ref: "#/components/schemas/PropertyType" }
+        listingType: { $ref: "#/components/schemas/ListingType" }
+        governorate: { type: string }
+        city: { type: string }
+        area: { type: string }
+        neighborhood: { type: string }
+        street: { type: string }
+        size: { type: number }
+        rooms: { type: integer }
+        bathrooms: { type: integer }
+        finishing: { $ref: "#/components/schemas/Finishing" }
+        floor: { type: string }
+        hasElevator: { type: boolean }
+        hasGarage: { type: boolean }
+        hasGarden: { type: boolean }
+        hasPool: { type: boolean }
+        furnished: { type: boolean }
+        installmentAvailable: { type: boolean }
+        immediateDelivery: { type: boolean }
+        kitchen: { type: string }
+        orientation: { type: string }
+        constructionYear: { type: integer }
+        images:
+          type: array
+          items: { type: string }
+        videoUrl: { type: string }
+        mapLat: { type: number }
+        mapLng: { type: number }
+        priceStatus: { $ref: "#/components/schemas/PriceStatus" }
+        status: { $ref: "#/components/schemas/ListingStatus" }
+
+    # ----- Trending areas / governorates -----
+    TrendingArea:
+      type: object
+      required: [governorate, city, area, listingsCount, averagePrice]
+      properties:
+        governorate: { type: string }
+        city: { type: string }
+        area: { type: string }
+        listingsCount: { type: integer }
+        averagePrice: { type: [number, "null"] }
+    Governorate:
+      type: object
+      required: [name, cities]
+      properties:
+        name: { type: string }
+        cities:
+          type: array
+          items: { type: string }
+
+    # ----- Requests -----
+    PropertyRequest:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - propertyType
+        - listingType
+        - governorate
+        - city
+        - neighborhood
+        - budgetMin
+        - budgetMax
+        - sizeMin
+        - roomsMin
+        - notes
+        - status
+        - matchedCount
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        title: { type: string }
+        propertyType: { $ref: "#/components/schemas/PropertyType" }
+        listingType: { $ref: "#/components/schemas/ListingType" }
+        governorate: { type: string }
+        city: { type: string }
+        neighborhood: { type: [string, "null"] }
+        budgetMin: { type: [number, "null"] }
+        budgetMax: { type: [number, "null"] }
+        sizeMin: { type: [number, "null"] }
+        roomsMin: { type: [integer, "null"] }
+        notes: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/RequestStatus" }
+        matchedCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RequestInput:
+      type: object
+      required: [title, propertyType, listingType, governorate, city]
+      properties:
+        title: { type: string, minLength: 1 }
+        propertyType: { $ref: "#/components/schemas/PropertyType" }
+        listingType: { $ref: "#/components/schemas/ListingType" }
+        governorate: { type: string, minLength: 1 }
+        city: { type: string, minLength: 1 }
+        neighborhood: { type: string }
+        budgetMin: { type: number }
+        budgetMax: { type: number }
+        sizeMin: { type: number }
+        roomsMin: { type: integer }
+        notes: { type: string }
+    RequestUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 1 }
+        propertyType: { $ref: "#/components/schemas/PropertyType" }
+        listingType: { $ref: "#/components/schemas/ListingType" }
+        governorate: { type: string }
+        city: { type: string }
+        neighborhood: { type: string }
+        budgetMin: { type: number }
+        budgetMax: { type: number }
+        sizeMin: { type: number }
+        roomsMin: { type: integer }
+        notes: { type: string }
+        status: { $ref: "#/components/schemas/RequestStatus" }
+
+    # ----- Saved searches -----
+    SavedSearch:
+      type: object
+      required: [id, userId, name, filtersJson, alertsEnabled, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        name: { type: string }
+        filtersJson:
+          type: object
+          additionalProperties: true
+        alertsEnabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SavedSearchInput:
+      type: object
+      required: [name, filtersJson]
+      properties:
+        name: { type: string, minLength: 1 }
+        filtersJson:
+          type: object
+          additionalProperties: true
+        alertsEnabled: { type: boolean, default: true }
+    SavedSearchUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        filtersJson:
+          type: object
+          additionalProperties: true
+        alertsEnabled: { type: boolean }
+
+    # ----- Favorites -----
+    Favorite:
+      type: object
+      required: [id, userId, listingId, listing, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        listingId: { type: string }
+        listing: { $ref: "#/components/schemas/Listing" }
+        createdAt: { type: string, format: date-time }
+    FavoriteInput:
+      type: object
+      required: [listingId]
+      properties:
+        listingId: { type: string, minLength: 1 }
+
+    # ----- Comparison -----
+    Comparison:
+      type: object
+      required: [id, userId, listingIds, listings, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        listingIds:
+          type: array
+          items: { type: string }
+        listings:
+          type: array
+          items: { $ref: "#/components/schemas/Listing" }
+        createdAt: { type: string, format: date-time }
+    ComparisonInput:
+      type: object
+      required: [listingIds]
+      properties:
+        listingIds:
+          type: array
+          items: { type: string }
+          minItems: 2
+          maxItems: 3
+
+    # ----- Notifications -----
+    Notification:
+      type: object
+      required: [id, userId, type, title, message, read, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        type: { $ref: "#/components/schemas/NotificationType" }
+        title: { type: string }
+        message: { type: string }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    # ----- Reports -----
+    Report:
+      type: object
+      required: [id, userId, listingId, officeId, reason, details, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        userId: { type: [string, "null"] }
+        listingId: { type: [string, "null"] }
+        officeId: { type: [string, "null"] }
+        reason: { type: string }
+        details: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/ReportStatus" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ReportInput:
+      type: object
+      required: [reason]
+      properties:
+        listingId: { type: string }
+        officeId: { type: string }
+        reason: { type: string, minLength: 1 }
+        details: { type: string }
+    ReportUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/ReportStatus" }
+
+    # ----- Dashboard -----
+    DashboardSummary:
+      type: object
+      required:
+        - favoritesCount
+        - activeRequestsCount
+        - savedSearchesCount
+        - unreadNotificationsCount
+        - recentFavorites
+        - recentNotifications
+      properties:
+        favoritesCount: { type: integer }
+        activeRequestsCount: { type: integer }
+        savedSearchesCount: { type: integer }
+        unreadNotificationsCount: { type: integer }
+        recentFavorites:
+          type: array
+          items: { $ref: "#/components/schemas/Listing" }
+        recentNotifications:
+          type: array
+          items: { $ref: "#/components/schemas/Notification" }
