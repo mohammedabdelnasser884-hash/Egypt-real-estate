@@ -1,0 +1,2 @@
+- [Web/API artifact routing](web-api-artifact-routing.md) — generated web clients may already include the shared `/api` prefix; avoid adding a second base URL.
+- [Orval generation constraints](orval-generation-constraints.md) — keep generator-specific Zod and parameter workarounds aligned with the API contract.
