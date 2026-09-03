@@ -1,0 +1,524 @@
+You are building a production-ready real estate platform for Egypt.
+
+This is the technical blueprint for the first serious version of the product.
+The app must be Arabic-first, mobile-first, trust-first, and optimized for daily usage and return visits.
+
+Important product goal:
+This is not a classifieds website.
+It is a structured real estate platform with verified listings, office profiles, saved searches, property tracking, and a daily feed that builds user habit.
+
+Recommended stack:
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- shadcn/ui or equivalent component system
+- Prisma ORM
+- PostgreSQL
+- NextAuth or a simple auth layer
+- Zod for validation
+- Server Actions and/or API routes
+- Optional future support for image upload, notifications, and AI features
+
+Do not implement monetization in this version.
+No payments.
+No subscriptions.
+No commissions.
+No advertising system yet.
+
+Build a clean and scalable architecture.
+
+==================================================
+1) PROJECT STRUCTURE
+==================================================
+
+Use this folder structure:
+
+/app
+  /(public)
+    page.tsx
+    search/page.tsx
+    property/[id]/page.tsx
+    office/[id]/page.tsx
+    requests/page.tsx
+    compare/page.tsx
+    trust/page.tsx
+    areas/page.tsx
+  /(dashboard)
+    dashboard/page.tsx
+    dashboard/listings/page.tsx
+    dashboard/requests/page.tsx
+    dashboard/saved-searches/page.tsx
+    dashboard/notifications/page.tsx
+    dashboard/profile/page.tsx
+  /(auth)
+    login/page.tsx
+    register/page.tsx
+/api
+  listings
+  offices
+  requests
+  saved-searches
+  favorites
+  compare
+  notifications
+  reports
+  auth
+/components
+  layout
+  home
+  search
+  listings
+  property
+  office
+  requests
+  compare
+  trust
+  ui
+/lib
+  db.ts
+  auth.ts
+  utils.ts
+  validators.ts
+  constants.ts
+/types
+  index.ts
+/prisma
+  schema.prisma
+/seed
+
+==================================================
+2) DATABASE TABLES
+==================================================
+
+Create the following Prisma models:
+
+User
+- id
+- name
+- email
+- phone
+- passwordHash
+- role (USER, OFFICE_ADMIN, PLATFORM_ADMIN)
+- createdAt
+- updatedAt
+
+Office
+- id
+- name
+- slug
+- logoUrl
+- phone
+- whatsapp
+- email
+- website
+- address
+- governorate
+- city
+- yearsOfExperience
+- responseSpeed
+- ratingAvg
+- verifiedStatus
+- dealsCount
+- activeListingsCount
+- bio
+- createdAt
+- updatedAt
+
+Listing
+- id
+- title
+- slug
+- description
+- price
+- currency
+- propertyType
+- listingType (SALE, RENT)
+- governorate
+- city
+- area
+- neighborhood
+- street
+- size
+- rooms
+- bathrooms
+- finishing
+- floor
+- hasElevator
+- hasGarage
+- hasGarden
+- hasPool
+- furnished
+- installmentAvailable
+- immediateDelivery
+- kitchen
+- orientation
+- constructionYear
+- images
+- videoUrl
+- mapLat
+- mapLng
+- officeId
+- ownerId optional
+- verifiedStatus
+- priceStatus
+- viewsCount
+- favoritesCount
+- createdAt
+- updatedAt
+
+Request
+- id
+- userId
+- title
+- propertyType
+- listingType
+- governorate
+- city
+- neighborhood
+- budgetMin
+- budgetMax
+- sizeMin
+- roomsMin
+- notes
+- status
+- matchedCount
+- createdAt
+- updatedAt
+
+SavedSearch
+- id
+- userId
+- name
+- filtersJson
+- alertsEnabled
+- createdAt
+- updatedAt
+
+Favorite
+- id
+- userId
+- listingId
+- createdAt
+
+Comparison
+- id
+- userId
+- listingIdsJson
+- createdAt
+
+Notification
+- id
+- userId
+- type
+- title
+- message
+- read
+- createdAt
+
+Report
+- id
+- userId optional
+- listingId optional
+- officeId optional
+- reason
+- details
+- status
+- createdAt
+- updatedAt
+
+ActivityLog
+- id
+- userId optional
+- action
+- entityType
+- entityId
+- metadataJson
+- createdAt
+
+==================================================
+3) API ROUTES
+==================================================
+
+Create REST-like routes or server actions for:
+
+GET /api/listings
+- supports filters, search, sorting, pagination
+
+GET /api/listings/[id]
+- returns full property details
+
+POST /api/listings
+- create listing
+
+PATCH /api/listings/[id]
+- update listing
+
+DELETE /api/listings/[id]
+- soft delete or remove listing
+
+GET /api/offices
+GET /api/offices/[id]
+POST /api/offices
+PATCH /api/offices/[id]
+
+GET /api/requests
+POST /api/requests
+PATCH /api/requests/[id]
+
+GET /api/saved-searches
+POST /api/saved-searches
+DELETE /api/saved-searches/[id]
+
+GET /api/favorites
+POST /api/favorites
+DELETE /api/favorites/[id]
+
+POST /api/compare
+GET /api/compare
+DELETE /api/compare/[id]
+
+GET /api/notifications
+PATCH /api/notifications/[id]/read
+
+POST /api/reports
+GET /api/reports for admin
+
+Make sure validation is strict using Zod.
+
+==================================================
+4) PAGE HIERARCHY
+==================================================
+
+Public pages:
+
+Home page
+- search bar
+- featured listings
+- new listings today
+- trending areas
+- verified offices
+- daily feed
+- saved searches preview
+- request summary
+- trust banner
+
+Search page
+- filters
+- sort controls
+- listings grid
+- map placeholder optional
+- saved search button
+
+Property details page
+- gallery
+- full details
+- trust section
+- office preview
+- similar listings
+- actions: save, compare, report, request visit
+
+Office page
+- office profile
+- verified badge
+- listings
+- stats
+- contact buttons
+- reviews placeholder
+
+Requests page
+- create request form
+- active requests
+- matched listings
+
+Compare page
+- side-by-side comparison
+- up to 3 properties
+
+Trust page
+- explanation of verification
+- reporting rules
+- data freshness meaning
+- office verification meaning
+
+Authenticated dashboard pages:
+
+Dashboard home
+- user activity
+- saved searches
+- favorites
+- notifications
+- recent views
+
+Dashboard listings
+- for office/admin users only
+- manage listings
+- edit listing
+- publish/unpublish
+
+Dashboard requests
+- manage property requests
+- view matched listings
+
+Dashboard saved searches
+- view and edit alerts
+
+Dashboard notifications
+- mark as read
+
+Dashboard profile
+- edit user info
+
+==================================================
+5) COMPONENT TREE
+==================================================
+
+Create reusable components:
+
+Layout:
+- Header
+- MobileNav
+- Footer
+- Sidebar for dashboard
+
+Home:
+- HeroSearch
+- CategoryTabs
+- FeaturedListings
+- DailyFeed
+- TrendingAreas
+- VerifiedOffices
+- SavedSearchPreview
+- RequestPreview
+
+Search:
+- FilterPanel
+- SortBar
+- SearchResultsGrid
+- ListingCard
+- MapPlaceholder
+
+Property:
+- PropertyGallery
+- PropertyMeta
+- TrustBadge
+- PriceStatusBadge
+- PropertyFeatures
+- SimilarListings
+- OfficeCard
+- ActionBar
+
+Office:
+- OfficeHeader
+- OfficeStats
+- OfficeListings
+- ContactBlock
+
+Requests:
+- RequestForm
+- RequestCard
+- MatchedListingsPanel
+
+Compare:
+- CompareTable
+- ComparePropertyCard
+
+Trust:
+- TrustExplainer
+- VerificationSteps
+- ReportRules
+
+UI:
+- Button
+- Input
+- Select
+- Badge
+- Card
+- Dialog
+- Tabs
+- Drawer
+- Skeleton
+- EmptyState
+- Pagination
+- Toast
+
+==================================================
+6) PRODUCT RULES
+==================================================
+
+The app must enforce these rules:
+
+- Verified badges must be visible on listings and offices.
+- Every listing must show last updated.
+- Duplicate listings should be prevented or flagged.
+- Reports must be easy to submit.
+- Saved searches must be easy to create.
+- Daily feed must surface fresh content first.
+- Price status must be shown clearly.
+- The UI must feel alive even with seed data.
+- Arabic text must render properly and the layout must support RTL.
+- Mobile UX is a priority.
+- Dashboard and public app must be separated cleanly.
+
+==================================================
+7) SEED DATA
+==================================================
+
+Seed the app with realistic Arabic data for Egypt:
+- several offices
+- several governorates and cities
+- mixed sale and rent listings
+- requests from users
+- saved searches
+- notifications
+- comparison examples
+- sample reports
+- trending areas
+
+Use realistic Egyptian property titles and neighborhoods.
+
+==================================================
+8) NON-FUNCTIONAL REQUIREMENTS
+==================================================
+
+- Clean architecture
+- Good TypeScript typing
+- SEO-friendly routes
+- Reusable components
+- Fast rendering
+- Server-side data fetching where appropriate
+- Error handling and loading states
+- Skeletons for async pages
+- Empty states for zero data
+- Simple audit logging
+
+==================================================
+9) FUTURE-PROOFING
+==================================================
+
+Leave clear extension points for:
+- AI price estimation
+- AI matching
+- office CRM
+- payments
+- subscriptions
+- commission tracking
+- image moderation
+- notifications by email/SMS/WhatsApp
+- advanced analytics
+
+==================================================
+10) OUTPUT EXPECTATION
+==================================================
+
+Generate the full codebase structure with:
+- a working Next.js app
+- database schema
+- routes
+- pages
+- components
+- seed data
+- clean Arabic-first UI
+
+If a feature is too large for the first build, implement a polished placeholder that keeps the user journey intact.
+
+The app should feel like the beginning of Egypt’s trusted real estate operating system.
