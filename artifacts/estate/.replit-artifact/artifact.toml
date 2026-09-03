@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Egypt Real Estate Platform"
+version = "1.0.0"
+id = "artifacts/estate"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22739
+
+[services.development]
+run = "pnpm --filter @workspace/estate run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/estate", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/estate/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22739"
+BASE_PATH = "/"
