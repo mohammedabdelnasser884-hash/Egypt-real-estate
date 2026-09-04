@@ -2,11 +2,11 @@
   "framework": null,
   "buildCommand": "node ./build.mjs",
   "functions": {
-    "dist/serverless.mjs": {
+    "api/index.js": {
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/dist/serverless" }
+    { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
