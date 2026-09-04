@@ -1,7 +1,9 @@
 {
   "buildCommand": "node ./build.mjs",
   "functions": {
-    "dist/serverless.mjs": {}
+    "dist/serverless.mjs": {
+      "maxDuration": 30
+    }
   },
   "rewrites": [
     { "source": "/(.*)", "destination": "/dist/serverless" }
