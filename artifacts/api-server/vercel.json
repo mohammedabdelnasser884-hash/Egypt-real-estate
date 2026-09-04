@@ -1,0 +1,9 @@
+{
+  "buildCommand": "node ./build.mjs",
+  "functions": {
+    "dist/serverless.mjs": {}
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/dist/serverless" }
+  ]
+}
